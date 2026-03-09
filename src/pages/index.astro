@@ -1,11 +1,231 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { db } from "../db";
+import { todos } from "../db/schema";
+import Layout from "../layouts/Layout.astro";
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("action")?.toString();
+
+  if (action === "add") {
+    const task = formData.get("task")?.toString();
+    if (task) {
+      await db.insert(todos).values({
+        task,
+      });
+    }
+  }
+
+  if (action === "toggle") {
+    const toggleId = formData.get("id")?.toString();
+    await db
+      .update(todos)
+      .set({ isCompleted: sql`NOT ${todos.isCompleted}` })
+      .where(eq(todos.id, toggleId ?? ""))
+      .execute();
+  }
+  // delete
+  if (action === "delete") {
+    const deleteId = formData.get("id")?.toString();
+    await db
+      .delete(todos)
+      .where(eq(todos.id, deleteId ?? ""))
+      .execute();
+  }
+  // update
+  if (action === "edit") {
+    const updateId = formData.get("id")?.toString();
+    const updateTask = formData.get("task")?.toString();
+    if (updateTask) {
+      await db
+        .update(todos)
+        .set({ task: updateTask })
+        .where(eq(todos.id, updateId ?? ""))
+        .execute();
+    }
+  }
+  return Astro.redirect("/");
+}
+
+const allTodos = await db
+  .select()
+  .from(todos)
+  .orderBy(asc(todos.isCompleted), desc(todos.createdAt))
+  .execute();
 ---
 
-<Layout>
-	<Welcome />
+<Layout title="Todo List">
+  <main class="max-w-xl mx-auto p-6 bg-white shadow-sm mt-10 rounded-xl">
+    <h1 class="text-2xl font-bold mb-6 text-slate-800 text-center">
+      📋 My Tasks
+    </h1>
+
+    <form method="POST" class="flex gap-2 mb-8">
+      <input
+        type="text"
+        name="task"
+        placeholder="Add new task..."
+        required
+        class="flex-1 px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+      />
+      <button
+        type="submit"
+        name="action"
+        value="add"
+        class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+        >Add</button
+      >
+    </form>
+     {allTodos.length === 0 && (<h3 class="text-center text-slate-400 my-5 italic">Congratulation, You are free now!</h3>)}
+
+    <ul class="space-y-4">
+      {
+        allTodos.map((u) => (
+          <li class="flex items-center gap-4 p-4 border border-slate-100 rounded-xl hover:shadow-md transition-shadow group bg-slate-50/50">
+            <form method="POST">
+              <input type="hidden" name="id" value={u.id} />
+              <button
+                name="action"
+                value="toggle"
+                class="mt-1 transition-transform hover:scale-110"
+              >
+                <img
+                  src={
+                    u.isCompleted
+                      ? "https://cdn-icons-png.flaticon.com/512/15219/15219921.png"
+                      : "https://cdn-icons-png.flaticon.com/512/14736/14736780.png"
+                  }
+                  class="w-6 h-6"
+                />
+              </button>
+            </form>
+
+            <span
+              class={`flex-1 text-lg ${u.isCompleted ? "line-through text-slate-400" : "text-slate-700 font-medium"}`}
+            >
+              {u.task}
+            </span>
+           
+
+            {u.isCompleted ? (
+              <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <form method="POST">
+                  <input type="hidden" name="id" value={u.id} />
+                  <button
+                    name="action"
+                    value="delete"
+                    class="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-100 text-red-600 shadow-sm"
+                  >
+                    🗑️
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  class="edit-btn p-2 bg-white border border-slate-200 rounded-lg hover:bg-amber-100 text-amber-600 shadow-sm"
+                  task-id={u.id}
+                  current-task={u.task}
+                >
+                  ✏️
+                </button>
+
+                <form method="POST">
+                  <input type="hidden" name="id" value={u.id} />
+                  <button
+                    name="action"
+                    value="delete"
+                    class="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-100 text-red-600 shadow-sm"
+                  >
+                    🗑️
+                  </button>
+                </form>
+              </div>
+            )}
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+
+  <dialog
+    id="edit-modal"
+    class="p-0 rounded-2xl backdrop:backdrop-blur-md shadow-2xl border-none w-[90%] max-w-sm fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 m-0"
+  >
+    <div class="p-6 bg-white rounded-2xl">
+      <h3 class="text-xl font-bold mb-4 text-slate-800">Edit Task</h3>
+      <form method="POST" class="space-y-4">
+        <input type="hidden" name="id" id="edit-id" />
+        <input
+          type="text"
+          name="task"
+          id="edit-task-input"
+          class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            id="close-modal"
+            class="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+            >Cancel</button
+          >
+          <button
+            type="submit"
+            name="action"
+            value="edit"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-lg shadow-blue-200"
+            >Save Changes</button
+          >
+        </div>
+      </form>
+    </div>
+  </dialog>
 </Layout>
+
+<style>
+  /* Đảm bảo backdrop bao phủ toàn màn hình và modal nằm giữa */
+  dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  /* Loại bỏ viền mặc định của dialog trên một số trình duyệt */
+  dialog:focus {
+    outline: none;
+  }
+</style>
+
+<script>
+  const modal = document.getElementById("edit-modal") as HTMLDialogElement;
+  const editIdInput = document.getElementById("edit-id") as HTMLInputElement;
+  const editTaskInput = document.getElementById(
+    "edit-task-input",
+  ) as HTMLInputElement;
+  const closeBtn = document.getElementById("close-modal");
+
+  // listen edit button
+  document.querySelectorAll(".edit-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("task-id");
+      const task = button.getAttribute("current-task");
+
+      if (id && task) {
+        editIdInput.value = id;
+        editTaskInput.value = task;
+        modal.showModal();
+      }
+    });
+  });
+
+  // close modal
+  closeBtn?.addEventListener("click", () => {
+    modal.close();
+  });
+
+  // close modal by click anywhere
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.close();
+  });
+</script>
