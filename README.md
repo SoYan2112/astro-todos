@@ -30,13 +30,13 @@ Start the local development environment: npm run dev
 # 📂 Project Structure
 ├── src/
 │   ├── db/
-│   │   ├── index.ts      # Database connection & Dotenv config
-│   │   └── schema.ts     # Table definitions (Schema)
-│   ├── layouts/          # Base Layout templates
+│   │   ├── index.ts      
+│   │   └── schema.ts    
+│   ├── layouts/         
 │   └── pages/
-│       └── index.astro   # Main UI and Server-side logic
-├── drizzle.config.ts     # Drizzle Kit configuration
-└── astro.config.mjs      # Astro settings & Vercel adapter
+│       └── index.astro   
+├── drizzle.config.ts    
+└── astro.config.mjs     
 
 # 📝 License
 This project is open-source and intended for educational purposes.
